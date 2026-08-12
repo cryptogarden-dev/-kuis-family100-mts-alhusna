@@ -18,16 +18,42 @@ const DB_DIR  = path.join(__dirname, '..', 'db');
 const DB_PATH = path.join(DB_DIR, 'data.json');
 const REDIS_KEY = 'kuis_family100:data';
 
-const HAS_VERCEL_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-const HAS_UPSTASH    = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+// Strip accidental wrapping quotes (common when copy-pasting env var values
+// into a dashboard, e.g. UPSTASH_REDIS_REST_URL="https://..." instead of
+// UPSTASH_REDIS_REST_URL=https://...) — a quoted value would otherwise be
+// an invalid URL/token and cause requests to hang instead of failing fast.
+function cleanEnv(v) {
+  if (!v) return v;
+  return v.trim().replace(/^['"]/, '').replace(/['"]$/, '');
+}
+
+const KV_URL      = cleanEnv(process.env.KV_REST_API_URL);
+const KV_TOKEN    = cleanEnv(process.env.KV_REST_API_TOKEN);
+const UPSTASH_URL   = cleanEnv(process.env.UPSTASH_REDIS_REST_URL);
+const UPSTASH_TOKEN = cleanEnv(process.env.UPSTASH_REDIS_REST_TOKEN);
+
+const HAS_VERCEL_KV = !!(KV_URL && KV_TOKEN);
+const HAS_UPSTASH   = !!(UPSTASH_URL && UPSTASH_TOKEN);
 const USE_REDIS = HAS_VERCEL_KV || HAS_UPSTASH;
 
 let redisClient = null;
 if (USE_REDIS) {
   const { Redis } = require('@upstash/redis');
   redisClient = HAS_VERCEL_KV
-    ? new Redis({ url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN })
-    : new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+    ? new Redis({ url: KV_URL, token: KV_TOKEN })
+    : new Redis({ url: UPSTASH_URL, token: UPSTASH_TOKEN });
+}
+
+// Redis calls should never hang forever — if Upstash is unreachable or the
+// credentials are wrong, fail fast with a clear error instead of leaving
+// the HTTP request open until the platform's own timeout.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Redis timeout after ${ms}ms (${label}) — cek UPSTASH_REDIS_REST_URL/TOKEN`)), ms)
+    ),
+  ]);
 }
 
 // ─── Default Structure ────────────────────────────────────────────────────────
@@ -66,15 +92,21 @@ class DB {
 
   async _load() {
     let loaded = null;
-    if (USE_REDIS) {
-      const raw = await redisClient.get(REDIS_KEY);
-      if (raw) loaded = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    } else {
-      try {
+    try {
+      if (USE_REDIS) {
+        const raw = await withTimeout(redisClient.get(REDIS_KEY), 8000, 'get');
+        if (raw) loaded = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } else {
         loaded = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-      } catch (_) {
-        loaded = null;
       }
+    } catch (err) {
+      if (USE_REDIS) {
+        // Surface the real reason instead of silently seeding empty data,
+        // which would mask a bad UPSTASH_REDIS_REST_URL/TOKEN.
+        console.error('❌ Gagal terhubung ke Redis:', err.message);
+        throw err;
+      }
+      loaded = null;
     }
 
     if (loaded) {
@@ -92,7 +124,7 @@ class DB {
 
   async save() {
     if (USE_REDIS) {
-      await redisClient.set(REDIS_KEY, JSON.stringify(this.data));
+      await withTimeout(redisClient.set(REDIS_KEY, JSON.stringify(this.data)), 8000, 'set');
     } else {
       if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
       fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf8');

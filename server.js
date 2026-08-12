@@ -16,6 +16,14 @@ app.use('/api/game',      require('./src/routes/game'));
 app.get('/',      (_req, res) => res.sendFile(path.join(__dirname, 'public', 'game.html')));
 app.get('/admin', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
+// ─── Error Handler ────────────────────────────────────────────────────────────
+// Ensures a failed DB call (e.g. bad Redis credentials) always returns a
+// real JSON error instead of leaving the request hanging.
+app.use((err, _req, res, _next) => {
+  console.error('❌ API error:', err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
 // ─── Start Server (local / self-hosted only) ─────────────────────────────────
 // On Vercel, this file is imported as a serverless function handler instead
 // (see vercel.json), so `app.listen` must not run there.

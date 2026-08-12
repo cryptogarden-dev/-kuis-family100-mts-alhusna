@@ -1,41 +1,42 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../database');
+const ah      = require('../asyncHandler');
 
 // GET all questions
-router.get('/', async (_req, res) => res.json(await db.getQuestions()));
+router.get('/', ah(async (_req, res) => res.json(await db.getQuestions())));
 
 // GET single question
-router.get('/:id', async (req, res) => {
+router.get('/:id', ah(async (req, res) => {
   const q = await db.getQuestion(+req.params.id);
   if (!q) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json(q);
-});
+}));
 
 // POST create question
-router.post('/', async (req, res) => {
+router.post('/', ah(async (req, res) => {
   const { question, time_limit, category, answers } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'Soal tidak boleh kosong' });
   const q = await db.addQuestion({ question: question.trim(), time_limit, category, answers });
   res.status(201).json(q);
-});
+}));
 
 // PUT update question
-router.put('/:id', async (req, res) => {
+router.put('/:id', ah(async (req, res) => {
   const q = await db.updateQuestion(+req.params.id, req.body);
   if (!q) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json(q);
-});
+}));
 
 // DELETE question
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ah(async (req, res) => {
   const ok = await db.deleteQuestion(+req.params.id);
   if (!ok) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json({ success: true });
-});
+}));
 
 // POST import soal dari format teks
-router.post('/import', async (req, res) => {
+router.post('/import', ah(async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'Teks tidak boleh kosong' });
 
@@ -86,6 +87,6 @@ router.post('/import', async (req, res) => {
   }
 
   res.json({ success: true, imported: imported.length, questions: imported, errors });
-});
+}));
 
 module.exports = router;

@@ -1,12 +1,13 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../database');
+const ah      = require('../asyncHandler');
 
 // GET full state (also polled every ~1s by game.html / admin.html)
-router.get('/state', async (_req, res) => res.json(await db.getFullState()));
+router.get('/state', ah(async (_req, res) => res.json(await db.getFullState())));
 
 // POST start round
-router.post('/start', async (req, res) => {
+router.post('/start', ah(async (req, res) => {
   const { question_id, active_team_id } = req.body;
   if (!question_id || !active_team_id)
     return res.status(400).json({ error: 'question_id dan active_team_id wajib diisi' });
@@ -30,10 +31,10 @@ router.post('/start', async (req, res) => {
   await db.pushEvent('round-start', {});
 
   res.json(await db.getFullState());
-});
+}));
 
 // POST reveal answer
-router.post('/reveal/:answerId', async (req, res) => {
+router.post('/reveal/:answerId', ah(async (req, res) => {
   const gs = await db.getGameState();
   if (gs.phase !== 'playing' && gs.phase !== 'steal')
     return res.status(400).json({ error: 'Game tidak dalam fase aktif' });
@@ -59,10 +60,10 @@ router.post('/reveal/:answerId', async (req, res) => {
   }
 
   res.json(await db.getFullState());
-});
+}));
 
 // POST add strike
-router.post('/strike', async (req, res) => {
+router.post('/strike', ah(async (req, res) => {
   const gs = await db.getGameState();
   if (gs.phase !== 'playing' && gs.phase !== 'steal')
     return res.status(400).json({ error: 'Game tidak dalam fase aktif' });
@@ -93,30 +94,30 @@ router.post('/strike', async (req, res) => {
   }
 
   res.json(await db.getFullState());
-});
+}));
 
 // POST end round
-router.post('/end', async (req, res) => {
+router.post('/end', ah(async (req, res) => {
   const gs = await db.getGameState();
   const { award_to_team } = req.body;
   if (award_to_team) await db.addScore(+award_to_team, gs.round_points || 0);
   await db.updateGameState({ phase: 'finished' });
   await db.stopTimer();
   res.json(await db.getFullState());
-});
+}));
 
 // POST pause / resume / reset
-router.post('/pause', async (_req, res) => {
+router.post('/pause', ah(async (_req, res) => {
   await db.pauseTimer();
   res.json({ success: true });
-});
+}));
 
-router.post('/resume', async (_req, res) => {
+router.post('/resume', ah(async (_req, res) => {
   await db.resumeTimer();
   res.json({ success: true });
-});
+}));
 
-router.post('/reset', async (_req, res) => {
+router.post('/reset', ah(async (_req, res) => {
   const settings = await db.getSettings();
   await db.updateGameState({
     question_id: null, active_team_id: null, phase: 'idle',
@@ -127,6 +128,6 @@ router.post('/reset', async (_req, res) => {
     round_points: 0,
   });
   res.json(await db.getFullState());
-});
+}));
 
 module.exports = router;
