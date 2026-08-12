@@ -1,14 +1,34 @@
 /**
- * JSON-based Database — tidak butuh library eksternal, murni Node.js
- * Data disimpan di db/data.json
+ * Database layer with two backends:
+ *  - File-based JSON (db/data.json) — used for local dev / self-hosting.
+ *  - Upstash Redis (REST API) — used on serverless platforms like Vercel,
+ *    where the filesystem is read-only/ephemeral.
+ *
+ * Backend is auto-selected: if UPSTASH_REDIS_REST_URL (or Vercel's
+ * KV_REST_API_URL) env vars are present, Redis is used. Otherwise falls
+ * back to the local JSON file.
+ *
+ * The whole app state is stored as a single JSON blob under one key,
+ * mirroring the previous file-based structure as closely as possible.
  */
 const fs   = require('fs');
 const path = require('path');
 
 const DB_DIR  = path.join(__dirname, '..', 'db');
 const DB_PATH = path.join(DB_DIR, 'data.json');
+const REDIS_KEY = 'kuis_family100:data';
 
-if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+const HAS_VERCEL_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+const HAS_UPSTASH    = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+const USE_REDIS = HAS_VERCEL_KV || HAS_UPSTASH;
+
+let redisClient = null;
+if (USE_REDIS) {
+  const { Redis } = require('@upstash/redis');
+  redisClient = HAS_VERCEL_KV
+    ? new Redis({ url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN })
+    : new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+}
 
 // ─── Default Structure ────────────────────────────────────────────────────────
 function defaultData() {
@@ -22,14 +42,16 @@ function defaultData() {
       app_title:    'KUIS FAMILY 100',
     },
     game_state: {
-      question_id:    null,
-      active_team_id: null,
-      phase:          'idle',
-      strikes:        0,
-      steal_team_id:  null,
+      question_id:     null,
+      active_team_id:  null,
+      phase:           'idle', // idle | playing | steal | timesup | finished
+      strikes:         0,
+      steal_team_id:   null,
       timer_remaining: 60,
-      timer_running:  false,
-      round_points:   0,
+      timer_running:   false,
+      timer_end_at:    null, // epoch ms — set while timer_running is true
+      round_points:    0,
+      last_event:      null, // { id, type, payload, at } — for client-side one-shot effects
     },
     _seq: { question: 1, answer: 1, team: 1 },
   };
@@ -38,23 +60,43 @@ function defaultData() {
 // ─── DB Class ─────────────────────────────────────────────────────────────────
 class DB {
   constructor() {
-    this._load();
+    this.data  = null;
+    this.ready = this._load();
   }
 
-  _load() {
-    try {
-      this.data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-      // Ensure _seq exists (migration safety)
+  async _load() {
+    let loaded = null;
+    if (USE_REDIS) {
+      const raw = await redisClient.get(REDIS_KEY);
+      if (raw) loaded = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } else {
+      try {
+        loaded = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+      } catch (_) {
+        loaded = null;
+      }
+    }
+
+    if (loaded) {
+      this.data = loaded;
       if (!this.data._seq) this.data._seq = { question: 1, answer: 1, team: 1 };
-    } catch (_) {
+      if (!this.data.game_state) this.data.game_state = defaultData().game_state;
+      if (this.data.game_state.timer_end_at === undefined) this.data.game_state.timer_end_at = null;
+      if (this.data.game_state.last_event === undefined) this.data.game_state.last_event = null;
+    } else {
       this.data = defaultData();
       this._seed();
-      this.save();
+      await this.save();
     }
   }
 
-  save() {
-    fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf8');
+  async save() {
+    if (USE_REDIS) {
+      await redisClient.set(REDIS_KEY, JSON.stringify(this.data));
+    } else {
+      if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+      fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf8');
+    }
   }
 
   nextId(type) {
@@ -62,15 +104,18 @@ class DB {
   }
 
   // ── Questions ─────────────────────────────────────────────────────────────
-  getQuestions() {
+  async getQuestions() {
+    await this.ready;
     return this.data.questions;
   }
 
-  getQuestion(id) {
+  async getQuestion(id) {
+    await this.ready;
     return this.data.questions.find(q => q.id === id) || null;
   }
 
-  addQuestion({ question, time_limit = 60, category = 'Umum', answers = [] }) {
+  async addQuestion({ question, time_limit = 60, category = 'Umum', answers = [] }) {
+    await this.ready;
     const id = this.nextId('question');
     const q = {
       id,
@@ -88,12 +133,13 @@ class DB {
       })),
     };
     this.data.questions.unshift(q);
-    this.save();
+    await this.save();
     return q;
   }
 
-  updateQuestion(id, { question, time_limit, category, answers }) {
-    const q = this.getQuestion(id);
+  async updateQuestion(id, { question, time_limit, category, answers }) {
+    await this.ready;
+    const q = await this.getQuestion(id);
     if (!q) return null;
     if (question   !== undefined) q.question   = question;
     if (time_limit !== undefined) q.time_limit = +time_limit;
@@ -108,20 +154,22 @@ class DB {
         revealed:    false,
       }));
     }
-    this.save();
+    await this.save();
     return q;
   }
 
-  deleteQuestion(id) {
+  async deleteQuestion(id) {
+    await this.ready;
     const idx = this.data.questions.findIndex(q => q.id === id);
     if (idx === -1) return false;
     this.data.questions.splice(idx, 1);
-    this.save();
+    await this.save();
     return true;
   }
 
   // ── Answers ───────────────────────────────────────────────────────────────
-  getAnswer(answerId) {
+  async getAnswer(answerId) {
+    await this.ready;
     for (const q of this.data.questions) {
       const a = q.answers.find(a => a.id === answerId);
       if (a) return a;
@@ -129,101 +177,187 @@ class DB {
     return null;
   }
 
-  revealAnswer(answerId) {
-    const a = this.getAnswer(answerId);
+  async revealAnswer(answerId) {
+    await this.ready;
+    const a = await this.getAnswer(answerId);
     if (!a) return null;
     a.revealed = true;
-    this.save();
+    await this.save();
     return a;
   }
 
-  resetAnswersForQuestion(questionId) {
-    const q = this.getQuestion(questionId);
+  async resetAnswersForQuestion(questionId) {
+    await this.ready;
+    const q = await this.getQuestion(questionId);
     if (!q) return;
     q.answers.forEach(a => (a.revealed = false));
-    this.save();
+    await this.save();
   }
 
   // ── Teams ─────────────────────────────────────────────────────────────────
-  getTeams() {
+  async getTeams() {
+    await this.ready;
     return [...this.data.teams].sort((a, b) => a.pos - b.pos);
   }
 
-  getTeam(id) {
+  async getTeam(id) {
+    await this.ready;
     return this.data.teams.find(t => t.id === id) || null;
   }
 
-  addTeam({ name, color = '#22c55e' }) {
+  async addTeam({ name, color = '#22c55e' }) {
+    await this.ready;
     const id  = this.nextId('team');
     const pos = this.data.teams.length;
     const t   = { id, name, color, score: 0, pos };
     this.data.teams.push(t);
-    this.save();
+    await this.save();
     return t;
   }
 
-  updateTeam(id, { name, color, score }) {
-    const t = this.getTeam(id);
+  async updateTeam(id, { name, color, score }) {
+    await this.ready;
+    const t = await this.getTeam(id);
     if (!t) return null;
     if (name  !== undefined) t.name  = name;
     if (color !== undefined) t.color = color;
     if (score !== undefined) t.score = +score;
-    this.save();
+    await this.save();
     return t;
   }
 
-  addScore(id, points) {
-    const t = this.getTeam(id);
+  async addScore(id, points) {
+    await this.ready;
+    const t = await this.getTeam(id);
     if (!t) return null;
     t.score += +points;
-    this.save();
+    await this.save();
     return t;
   }
 
-  deleteTeam(id) {
+  async deleteTeam(id) {
+    await this.ready;
     const idx = this.data.teams.findIndex(t => t.id === id);
     if (idx === -1) return false;
     this.data.teams.splice(idx, 1);
-    this.save();
+    await this.save();
     return true;
   }
 
-  resetAllScores() {
+  async resetAllScores() {
+    await this.ready;
     this.data.teams.forEach(t => (t.score = 0));
-    this.save();
+    await this.save();
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  getSettings() {
+  async getSettings() {
+    await this.ready;
     return { ...this.data.settings };
   }
 
-  updateSettings(obj) {
+  async updateSettings(obj) {
+    await this.ready;
     Object.assign(this.data.settings, obj);
-    this.save();
+    await this.save();
     return this.getSettings();
   }
 
-  // ── Game State ────────────────────────────────────────────────────────────
-  getGameState() {
-    return { ...this.data.game_state };
+  // ── Game State & Timer ───────────────────────────────────────────────────
+  // The timer is timestamp-based (not a running interval) so it survives
+  // serverless cold starts / restarts. `timer_end_at` is the epoch ms when
+  // the timer will hit zero; remaining seconds are computed on read.
+  _liveRemaining() {
+    const gs = this.data.game_state;
+    if (gs.timer_running && gs.timer_end_at) {
+      return Math.max(0, Math.ceil((gs.timer_end_at - Date.now()) / 1000));
+    }
+    return gs.timer_remaining;
   }
 
-  updateGameState(patch) {
+  _checkExpiry() {
+    const gs = this.data.game_state;
+    if (gs.timer_running && gs.timer_end_at && Date.now() >= gs.timer_end_at) {
+      gs.timer_running   = false;
+      gs.timer_remaining = 0;
+      gs.timer_end_at    = null;
+      if (gs.phase === 'playing' || gs.phase === 'steal') {
+        gs.phase = 'timesup';
+        this._pushEvent('timesup', {});
+      }
+      return true;
+    }
+    return false;
+  }
+
+  _pushEvent(type, payload) {
+    const gs = this.data.game_state;
+    const prevId = gs.last_event?.id || 0;
+    gs.last_event = { id: prevId + 1, type, payload, at: Date.now() };
+  }
+
+  async pushEvent(type, payload) {
+    await this.ready;
+    this._pushEvent(type, payload);
+    await this.save();
+  }
+
+  async startTimer(seconds) {
+    await this.ready;
+    const gs = this.data.game_state;
+    gs.timer_running   = true;
+    gs.timer_remaining = +seconds;
+    gs.timer_end_at    = Date.now() + (+seconds) * 1000;
+    await this.save();
+  }
+
+  async stopTimer() {
+    await this.ready;
+    const gs = this.data.game_state;
+    gs.timer_remaining = this._liveRemaining();
+    gs.timer_running   = false;
+    gs.timer_end_at     = null;
+    await this.save();
+  }
+
+  async pauseTimer() {
+    await this.stopTimer();
+  }
+
+  async resumeTimer() {
+    await this.ready;
+    const gs = this.data.game_state;
+    if (gs.timer_remaining > 0) {
+      gs.timer_running = true;
+      gs.timer_end_at  = Date.now() + gs.timer_remaining * 1000;
+      await this.save();
+    }
+  }
+
+  async getGameState() {
+    await this.ready;
+    const expired = this._checkExpiry();
+    if (expired) await this.save();
+    return { ...this.data.game_state, timer_remaining: this._liveRemaining() };
+  }
+
+  async updateGameState(patch) {
+    await this.ready;
     Object.assign(this.data.game_state, patch);
-    this.save();
+    await this.save();
     return this.getGameState();
   }
 
-  getFullState() {
-    const game   = this.getGameState();
-    const teams  = this.getTeams();
-    const settings = this.getSettings();
+  async getFullState() {
+    await this.ready;
+    const game     = await this.getGameState();
+    const teams    = await this.getTeams();
+    const settings = await this.getSettings();
     let question = null;
     let answers  = [];
 
     if (game.question_id) {
-      question = this.getQuestion(game.question_id);
+      question = await this.getQuestion(game.question_id);
       answers  = question ? [...question.answers] : [];
     }
 
@@ -307,10 +441,30 @@ class DB {
       },
     ];
 
-    seedQuestions.forEach(q => this.addQuestion(q));
+    // Seed is done synchronously in-memory here (before first save()).
+    let qSeq = this.data._seq.question;
+    let aSeq = this.data._seq.answer;
+    seedQuestions.forEach(sq => {
+      const id = qSeq++;
+      this.data.questions.unshift({
+        id,
+        question: sq.question,
+        time_limit: sq.time_limit,
+        category: sq.category,
+        created_at: new Date().toISOString(),
+        answers: sq.answers.map((a, i) => ({
+          id: aSeq++, question_id: id, answer: a.answer,
+          points: a.points, rank: i + 1, revealed: false,
+        })),
+      });
+    });
+    this.data._seq.question = qSeq;
+    this.data._seq.answer   = aSeq;
 
-    this.addTeam({ name: 'Tim 1', color: '#16a34a' });
-    this.addTeam({ name: 'Tim 2', color: '#2563eb' });
+    let tSeq = this.data._seq.team;
+    this.data.teams.push({ id: tSeq++, name: 'Tim 1', color: '#16a34a', score: 0, pos: 0 });
+    this.data.teams.push({ id: tSeq++, name: 'Tim 2', color: '#2563eb', score: 0, pos: 1 });
+    this.data._seq.team = tSeq;
 
     console.log('✅ Sample data berhasil ditambahkan.');
   }

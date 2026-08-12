@@ -343,14 +343,11 @@ Bilangan Irasional | 10</div>
 <!-- ─── Toast Container ───────────────────────────── -->
 <div class="toast-container" id="toastContainer"></div>
 
-<script src="/socket.io/socket.io.js"></script>
 <script src="/js/sounds.js"></script>
 <script>
 // ════════════════════════════════════════════════
 // ADMIN PANEL — Full Control
 // ════════════════════════════════════════════════
-const socket = io();
-
 // Global state
 let allQuestions = [];
 let allTeams = [];
@@ -359,25 +356,42 @@ let gameState = null;
 let editingQuestionId = null;
 let editingTeamId = null;
 let timerMax = 60;
+let lastEventId = 0;
 
 const TEAM_COLORS = [
   '#22c55e','#2563eb','#dc2626','#f59e0b',
   '#8b5cf6','#ec4899','#06b6d4','#f97316'
 ];
 
-// ─── Socket Events ──────────────────────────────
-socket.on('game:state', (s) => { updateGameUI(s); });
-socket.on('game:timer', ({ remaining }) => { updateAdminTimer(remaining); });
-socket.on('game:timesup', () => {
-  toast('⏰ Waktu Habis!', 'info');
-  SoundEngine.timesUp();
-});
-socket.on('game:celebration', ({ team_id, points }) => {
-  const t = allTeams.find(t => t.id === team_id);
-  toast(`🎉 ${t?.name || 'Tim'} mendapat ${points} poin!`, 'success');
-  SoundEngine.celebrate();
-  setTimeout(loadTeams, 500);
-});
+// ─── Poll server state every second ─────────────
+async function pollGameState() {
+  try {
+    const s = await api('GET', '/api/game/state');
+    handleGameEvents(s);
+    gameState = s;
+    updateGameUI(s);
+  } catch (e) {
+    console.error('Gagal memuat status game:', e);
+  }
+}
+
+function handleGameEvents(s) {
+  const ev = s.game?.last_event;
+  if (!ev || ev.id <= lastEventId) return;
+  lastEventId = ev.id;
+
+  if (ev.type === 'timesup') {
+    toast('⏰ Waktu Habis!', 'info');
+    SoundEngine.timesUp();
+  } else if (ev.type === 'celebration') {
+    const t = allTeams.find(t => t.id === ev.payload.team_id);
+    toast(`🎉 ${t?.name || 'Tim'} mendapat ${ev.payload.points} poin!`, 'success');
+    SoundEngine.celebrate();
+    setTimeout(loadTeams, 500);
+  }
+}
+
+setInterval(pollGameState, 1000);
 
 // ─── Tab Navigation ─────────────────────────────
 function showTab(name) {
@@ -406,6 +420,8 @@ async function api(method, url, body) {
 // ─── Load Data ───────────────────────────────────
 async function loadGameState() {
   gameState = await api('GET', '/api/game/state');
+  // Don't replay old one-shot effects (celebration/timesup) on initial load.
+  lastEventId = gameState.game?.last_event?.id || 0;
   updateGameUI(gameState);
 }
 

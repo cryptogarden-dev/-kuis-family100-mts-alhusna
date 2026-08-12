@@ -3,39 +3,39 @@ const router  = express.Router();
 const db      = require('../database');
 
 // GET all questions
-router.get('/', (_req, res) => res.json(db.getQuestions()));
+router.get('/', async (_req, res) => res.json(await db.getQuestions()));
 
 // GET single question
-router.get('/:id', (req, res) => {
-  const q = db.getQuestion(+req.params.id);
+router.get('/:id', async (req, res) => {
+  const q = await db.getQuestion(+req.params.id);
   if (!q) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json(q);
 });
 
 // POST create question
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { question, time_limit, category, answers } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'Soal tidak boleh kosong' });
-  const q = db.addQuestion({ question: question.trim(), time_limit, category, answers });
+  const q = await db.addQuestion({ question: question.trim(), time_limit, category, answers });
   res.status(201).json(q);
 });
 
 // PUT update question
-router.put('/:id', (req, res) => {
-  const q = db.updateQuestion(+req.params.id, req.body);
+router.put('/:id', async (req, res) => {
+  const q = await db.updateQuestion(+req.params.id, req.body);
   if (!q) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json(q);
 });
 
 // DELETE question
-router.delete('/:id', (req, res) => {
-  const ok = db.deleteQuestion(+req.params.id);
+router.delete('/:id', async (req, res) => {
+  const ok = await db.deleteQuestion(+req.params.id);
   if (!ok) return res.status(404).json({ error: 'Soal tidak ditemukan' });
   res.json({ success: true });
 });
 
 // POST import soal dari format teks
-router.post('/import', (req, res) => {
+router.post('/import', async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'Teks tidak boleh kosong' });
 
@@ -81,7 +81,7 @@ router.post('/import', (req, res) => {
       continue;
     }
 
-    db.addQuestion({ question, time_limit, category, answers });
+    await db.addQuestion({ question, time_limit, category, answers });
     imported.push(question);
   }
 

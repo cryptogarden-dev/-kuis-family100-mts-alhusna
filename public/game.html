@@ -98,57 +98,65 @@
 <!-- ─── Confetti ─────────────────────────────────────── -->
 <div class="confetti-container" id="confettiContainer"></div>
 
-<script src="/socket.io/socket.io.js"></script>
 <script src="/js/sounds.js"></script>
 <script>
 // ════════════════════════════════════════════════
-// GAME SCREEN — Real-time display
+// GAME SCREEN — Real-time display via polling
 // ════════════════════════════════════════════════
-const socket = io();
-
 let state = null;
 let timerMax = 60;
+let lastEventId = 0;
 const CIRCUMFERENCE = 2 * Math.PI * 34; // ~213.6
 
 // DOM refs
 const $ = id => document.getElementById(id);
 
-// ─── Socket Events ──────────────────────────────
-socket.on('game:state', (s) => { state = s; renderAll(s); });
+// ─── Poll server state every second ─────────────
+async function pollState() {
+  try {
+    const res = await fetch('/api/game/state');
+    const s = await res.json();
+    handleEvents(s);
+    state = s;
+    renderAll(s);
 
-socket.on('game:timer', ({ remaining }) => {
-  updateTimer(remaining);
-  // Tick sound when <= 10 seconds
-  if (remaining <= 10 && remaining > 0 && state?.game?.phase === 'playing') {
-    SoundEngine.timerWarning();
+    if (s.game.timer_running && s.game.phase === 'playing' &&
+        s.game.timer_remaining <= 10 && s.game.timer_remaining > 0) {
+      SoundEngine.timerWarning();
+    }
+  } catch (e) {
+    console.error('Gagal memuat state:', e);
   }
-});
+}
 
-socket.on('game:timesup', () => {
-  SoundEngine.timesUp();
-  showOverlay('⏰', 'WAKTU HABIS!', 'Guru akan menentukan kelanjutan ronde');
-  setTimeout(() => hideOverlay(), 3000);
-});
+// ─── Handle one-shot events (celebration, steal, timesup) ───
+function handleEvents(s) {
+  const ev = s.game?.last_event;
+  if (!ev || ev.id <= lastEventId) return;
+  lastEventId = ev.id;
 
-socket.on('game:celebration', ({ team_id, points }) => {
-  SoundEngine.celebrate();
-  const team = state?.teams?.find(t => t.id === team_id);
-  showOverlay('🎉', 'JAWABAN LENGKAP!', `${team?.name || 'Tim'} mendapat ${points} poin!`);
-  launchConfetti();
-  setTimeout(() => hideOverlay(), 4000);
-});
+  if (ev.type === 'timesup') {
+    SoundEngine.timesUp();
+    showOverlay('⏰', 'WAKTU HABIS!', 'Guru akan menentukan kelanjutan ronde');
+    setTimeout(() => hideOverlay(), 3000);
+  } else if (ev.type === 'celebration') {
+    SoundEngine.celebrate();
+    const team = s.teams?.find(t => t.id === ev.payload.team_id);
+    showOverlay('🎉', 'JAWABAN LENGKAP!', `${team?.name || 'Tim'} mendapat ${ev.payload.points} poin!`);
+    launchConfetti();
+    setTimeout(() => hideOverlay(), 4000);
+  } else if (ev.type === 'steal-mode') {
+    SoundEngine.stealMode();
+    showOverlay('⚡', 'MODE STEAL!', `${ev.payload.steal_team?.name || 'Tim lain'} dapat kesempatan mencuri!`);
+    setTimeout(() => hideOverlay(), 2500);
+  } else if (ev.type === 'steal-fail') {
+    SoundEngine.wrong();
+    showOverlay('❌', 'STEAL GAGAL!', 'Ronde selesai');
+    setTimeout(() => hideOverlay(), 2000);
+  }
+}
 
-socket.on('game:steal-mode', ({ steal_team }) => {
-  SoundEngine.stealMode();
-  showOverlay('⚡', 'MODE STEAL!', `${steal_team?.name || 'Tim lain'} dapat kesempatan mencuri!`);
-  setTimeout(() => hideOverlay(), 2500);
-});
-
-socket.on('game:steal-fail', () => {
-  SoundEngine.wrong();
-  showOverlay('❌', 'STEAL GAGAL!', 'Ronde selesai');
-  setTimeout(() => hideOverlay(), 2000);
-});
+setInterval(pollState, 1000);
 
 // ─── Render Everything ──────────────────────────
 function renderAll(s) {
@@ -397,6 +405,8 @@ function createIdleScreen() {
   try {
     const res = await fetch('/api/game/state');
     const s = await res.json();
+    // Don't replay old one-shot effects (celebration/steal/timesup) on page load.
+    lastEventId = s.game?.last_event?.id || 0;
     state = s;
     renderAll(s);
   } catch (e) {

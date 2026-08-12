@@ -4,7 +4,7 @@ Aplikasi kuis interaktif bergaya Family 100 untuk media belajar siswa MTS.
 
 ---
 
-## 🚀 Cara Menjalankan
+## 🚀 Cara Menjalankan (Lokal / Jaringan Sekolah)
 
 ### 1. Install Dependencies (sekali saja)
 ```
@@ -23,6 +23,39 @@ npm start
 ### 4. Akses dari Komputer Lain (jaringan yang sama)
 - Cari IP laptop guru: buka CMD → ketik `ipconfig`
 - Buka di komputer lain: `http://[IP-LAPTOP]:3000`
+
+Mode ini menyimpan data di `db/data.json` (file lokal) dan tidak butuh akun/layanan apa pun.
+
+---
+
+## ☁️ Deploy ke Vercel (Opsional — akses dari internet)
+
+App ini bisa juga dihosting di [Vercel](https://vercel.com) (gratis, tanpa kartu kredit di plan Hobby). Karena Vercel menjalankan kode sebagai *serverless function* (tidak ada proses yang hidup terus & filesystem-nya sementara), app ini didesain ulang agar:
+- Real-time update memakai **polling** (setiap 1 detik) alih-alih WebSocket/Socket.io.
+- Timer dihitung dari **timestamp**, bukan `setInterval` di server.
+- Data disimpan di **Upstash Redis** (database eksternal gratis), bukan file lokal.
+
+### Langkah setup:
+
+1. **Buat database Redis gratis di Upstash**
+   - Daftar di [upstash.com](https://upstash.com) (gratis, biasanya tanpa kartu kredit)
+   - Buat database **Redis** baru (pilih region terdekat, misalnya Singapore)
+   - Di halaman database, buka tab **REST API** dan catat:
+     - `UPSTASH_REDIS_REST_URL`
+     - `UPSTASH_REDIS_REST_TOKEN`
+
+2. **Import project ini ke Vercel**
+   - Buka [vercel.com/new](https://vercel.com/new), pilih repo GitHub ini
+   - Sebelum klik Deploy, buka bagian **Environment Variables**, tambahkan:
+     - `UPSTASH_REDIS_REST_URL` = (dari langkah 1)
+     - `UPSTASH_REDIS_REST_TOKEN` = (dari langkah 1)
+   - Klik **Deploy**
+
+3. Setelah selesai, Vercel memberi URL seperti `https://nama-app.vercel.app`
+   - **Layar Game:** URL itu langsung
+   - **Admin Panel:** URL itu + `/admin`
+
+> Kalau env var Upstash **tidak** diisi, app tetap bisa jalan di Vercel tapi data (soal/tim/skor) akan hilang setiap kali function di-restart — jadi untuk pemakaian serius di Vercel, setup Upstash Redis di atas wajib dilakukan.
 
 ---
 
