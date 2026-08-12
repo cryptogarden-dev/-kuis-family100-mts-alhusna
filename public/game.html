@@ -120,7 +120,7 @@ async function pollState() {
     state = s;
     renderAll(s);
 
-    if (s.game.timer_running && s.game.phase === 'playing' &&
+    if (s.game.timer_enabled !== false && s.game.timer_running && s.game.phase === 'playing' &&
         s.game.timer_remaining <= 10 && s.game.timer_remaining > 0) {
       SoundEngine.timerWarning();
     }
@@ -244,9 +244,13 @@ function renderAnswers(answers, question, game) {
     section.appendChild(row);
   }
 
-  timer.style.display = 'flex';
-  timerMax = question.time_limit || 60;
-  updateTimer(game.timer_remaining);
+  if (game.timer_enabled === false) {
+    timer.style.display = 'none';
+  } else {
+    timer.style.display = 'flex';
+    timerMax = question.time_limit || 60;
+    updateTimer(game.timer_remaining);
+  }
 }
 
 function createAnswerRow(answer, wasRevealed) {
@@ -301,7 +305,7 @@ function renderStrikes(game, settings) {
 
 function renderTimer(game) {
   const timerEl = $('timerSection');
-  if (game.phase === 'idle' || !game.question_id) {
+  if (game.phase === 'idle' || !game.question_id || game.timer_enabled === false) {
     timerEl.style.display = 'none';
     return;
   }

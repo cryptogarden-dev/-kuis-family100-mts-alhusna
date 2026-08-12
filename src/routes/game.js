@@ -8,7 +8,7 @@ router.get('/state', ah(async (_req, res) => res.json(await db.getFullState())))
 
 // POST start round
 router.post('/start', ah(async (req, res) => {
-  const { question_id, active_team_id } = req.body;
+  const { question_id, active_team_id, use_timer } = req.body;
   if (!question_id || !active_team_id)
     return res.status(400).json({ error: 'question_id dan active_team_id wajib diisi' });
 
@@ -27,7 +27,12 @@ router.post('/start', ah(async (req, res) => {
     steal_team_id:  null,
     round_points:   0,
   });
-  await db.startTimer(q.time_limit);
+
+  if (use_timer === false) {
+    await db.disableTimer();
+  } else {
+    await db.startTimer(q.time_limit);
+  }
   await db.pushEvent('round-start', {});
 
   res.json(await db.getFullState());
@@ -87,7 +92,8 @@ router.post('/strike', ah(async (req, res) => {
       phase:         'steal',
       steal_team_id: otherTeam ? otherTeam.id : null,
     });
-    await db.startTimer(30);
+    // Ronde tanpa timer tetap tanpa timer di fase steal — guru yang menentukan kapan selesai.
+    if (gs.timer_enabled !== false) await db.startTimer(30);
     await db.pushEvent('steal-mode', { steal_team: otherTeam });
   } else {
     await db.updateGameState({ strikes: newStrikes });
@@ -121,7 +127,7 @@ router.post('/reset', ah(async (_req, res) => {
   const settings = await db.getSettings();
   await db.updateGameState({
     question_id: null, active_team_id: null, phase: 'idle',
-    strikes: 0, steal_team_id: null,
+    strikes: 0, steal_team_id: null, timer_enabled: true,
     timer_remaining: parseInt(settings.default_time) || 60,
     timer_running: false,
     timer_end_at: null,

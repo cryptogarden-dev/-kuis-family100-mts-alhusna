@@ -73,6 +73,7 @@ function defaultData() {
       phase:           'idle', // idle | playing | steal | timesup | finished
       strikes:         0,
       steal_team_id:   null,
+      timer_enabled:   true,  // false = ronde ini dimainkan tanpa batas waktu
       timer_remaining: 60,
       timer_running:   false,
       timer_end_at:    null, // epoch ms — set while timer_running is true
@@ -115,6 +116,7 @@ class DB {
       if (!this.data.game_state) this.data.game_state = defaultData().game_state;
       if (this.data.game_state.timer_end_at === undefined) this.data.game_state.timer_end_at = null;
       if (this.data.game_state.last_event === undefined) this.data.game_state.last_event = null;
+      if (this.data.game_state.timer_enabled === undefined) this.data.game_state.timer_enabled = true;
     } else {
       this.data = defaultData();
       this._seed();
@@ -337,9 +339,21 @@ class DB {
   async startTimer(seconds) {
     await this.ready;
     const gs = this.data.game_state;
+    gs.timer_enabled   = true;
     gs.timer_running   = true;
     gs.timer_remaining = +seconds;
     gs.timer_end_at    = Date.now() + (+seconds) * 1000;
+    await this.save();
+  }
+
+  // Ronde dimainkan tanpa batas waktu — tidak ada auto-timesup.
+  async disableTimer() {
+    await this.ready;
+    const gs = this.data.game_state;
+    gs.timer_enabled   = false;
+    gs.timer_running   = false;
+    gs.timer_remaining = 0;
+    gs.timer_end_at    = null;
     await this.save();
   }
 

@@ -77,10 +77,16 @@
           </div>
         </div>
 
+        <label class="timer-toggle">
+          <input type="checkbox" id="useTimerToggle" checked onchange="saveTimerTogglePref()" />
+          <span class="timer-toggle-slider"></span>
+          <span class="timer-toggle-label">⏱️ <span id="useTimerText">Pakai Timer</span></span>
+        </label>
+
         <div class="control-buttons">
           <button class="btn btn-gold btn-lg" onclick="startGame()">▶ MULAI RONDE</button>
-          <button class="btn btn-outline btn-lg" onclick="pauseTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">⏸ Pause Timer</button>
-          <button class="btn btn-outline btn-lg" onclick="resumeTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">▶ Resume Timer</button>
+          <button class="btn btn-outline btn-lg" id="btnPauseTimer" onclick="pauseTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">⏸ Pause Timer</button>
+          <button class="btn btn-outline btn-lg" id="btnResumeTimer" onclick="resumeTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">▶ Resume Timer</button>
           <button class="btn btn-danger btn-lg" onclick="endRound()">⏹ Akhiri Ronde</button>
         </div>
       </div>
@@ -404,9 +410,11 @@ function showTab(name) {
 
 // ─── Initial Load ────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  loadTimerTogglePref();
   await Promise.all([loadSettings(), loadQuestions(), loadTeams(), loadGameState()]);
   buildColorSwatches();
   buildDefaultAnswerInputs();
+  requestWakeLock();
 });
 
 // ─── API Helpers ─────────────────────────────────
@@ -447,11 +455,12 @@ async function loadSettings() {
 async function startGame() {
   const qId = document.getElementById('selectQuestion').value;
   const tId = document.getElementById('selectTeam').value;
+  const useTimer = document.getElementById('useTimerToggle').checked;
   if (!qId) return toast('Pilih soal terlebih dahulu', 'error');
   if (!tId) return toast('Pilih tim terlebih dahulu', 'error');
 
   SoundEngine.gameStart();
-  const res = await api('POST', '/api/game/start', { question_id: +qId, active_team_id: +tId });
+  const res = await api('POST', '/api/game/start', { question_id: +qId, active_team_id: +tId, use_timer: useTimer });
   if (res.error) return toast(res.error, 'error');
   gameState = res;
   updateGameUI(res);
@@ -564,7 +573,41 @@ function updateGameUI(s) {
   renderAwardPoints(game, s.teams);
 
   // Timer
-  updateAdminTimer(game.timer_remaining, s.question?.time_limit);
+  updateAdminTimer(game.timer_remaining, s.question?.time_limit, game.timer_enabled);
+
+  // Pause/Resume timer hanya relevan kalau ronde ini memang pakai timer
+  const pauseBtn  = document.getElementById('btnPauseTimer');
+  const resumeBtn = document.getElementById('btnResumeTimer');
+  if (pauseBtn)  pauseBtn.style.display  = game.timer_enabled === false ? 'none' : '';
+  if (resumeBtn) resumeBtn.style.display = game.timer_enabled === false ? 'none' : '';
+}
+
+// ─── Wake Lock: cegah layar HP mati saat dipakai kontrol ───
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) {
+    // Tidak didukung / ditolak browser — aman diabaikan.
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+function saveTimerTogglePref() {
+  const useTimer = document.getElementById('useTimerToggle').checked;
+  localStorage.setItem('kuis_use_timer', useTimer ? '1' : '0');
+  document.getElementById('useTimerText').textContent = useTimer ? 'Pakai Timer' : 'Tanpa Waktu';
+}
+
+function loadTimerTogglePref() {
+  const saved = localStorage.getItem('kuis_use_timer');
+  const useTimer = saved !== '0';
+  document.getElementById('useTimerToggle').checked = useTimer;
+  document.getElementById('useTimerText').textContent = useTimer ? 'Pakai Timer' : 'Tanpa Waktu';
 }
 
 function renderAdminAnswers(answers, game) {
@@ -628,11 +671,20 @@ function renderAwardPoints(game, teams) {
   `;
 }
 
-function updateAdminTimer(remaining, max) {
+function updateAdminTimer(remaining, max, enabled) {
   if (max) timerMax = max;
   const el = document.getElementById('adminTimer');
   const bar = document.getElementById('adminTimerBar');
   if (!el) return;
+
+  if (enabled === false) {
+    el.textContent = '∞';
+    el.style.color = '#fcd34d';
+    if (bar) { bar.style.width = '100%'; bar.style.background = '#22c55e'; }
+    document.getElementById('sidebarTimer').textContent = 'Tanpa Waktu';
+    return;
+  }
+
   const secs = Math.max(0, remaining || 0);
   el.textContent = secs + 's';
   el.style.color = secs <= 10 ? '#dc2626' : secs <= 20 ? '#d97706' : '#fcd34d';
