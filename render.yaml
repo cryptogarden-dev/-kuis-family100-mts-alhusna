@@ -1,0 +1,24 @@
+# Blueprint untuk Render.com — cukup import repo ini di dashboard Render
+# dan pilih "Apply from render.yaml".
+#
+# Catatan penyimpanan data:
+# - Plan "free" TIDAK mendukung persistent disk, jadi file db/data.json akan
+#   ter-reset setiap kali service redeploy/restart (masih aman dipakai untuk
+#   satu sesi kuis di kelas).
+# - Kalau butuh data (soal/tim/skor) tersimpan permanen antar-restart, upgrade
+#   ke plan "starter" lalu aktifkan bagian "disk" di bawah (hapus tanda #).
+services:
+  - type: web
+    name: kuis-family100-mts-alhusna
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+    # plan: starter
+    # disk:
+    #   name: kuis-data
+    #   mountPath: /opt/render/project/src/db
+    #   sizeGB: 1

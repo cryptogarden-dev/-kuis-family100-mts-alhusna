@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel — KUIS FAMILY 100 MTS Al Husna</title>
+  <link rel="stylesheet" href="/css/admin.css" />
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────── -->
+<header class="admin-header">
+  <div class="logo">🌙 <span>KUIS FAMILY 100</span> — MTS Al Husna</div>
+  <div class="header-links">
+    <a href="/" target="_blank" class="primary">🎮 Buka Layar Game</a>
+    <a href="#" onclick="resetGame()">🔄 Reset Game</a>
+  </div>
+</header>
+
+<div class="admin-body">
+
+  <!-- ─── Sidebar ──────────────────────────────────── -->
+  <nav class="sidebar">
+    <span class="sidebar-title">Menu</span>
+    <a href="#" class="active" onclick="showTab('game')" id="tab-game">
+      <span class="icon">🎮</span> Kontrol Game
+    </a>
+    <a href="#" onclick="showTab('questions')" id="tab-questions">
+      <span class="icon">📋</span> Kelola Soal
+    </a>
+    <a href="#" onclick="showTab('teams')" id="tab-teams">
+      <span class="icon">👥</span> Kelola Tim
+    </a>
+    <a href="#" onclick="showTab('import')" id="tab-import">
+      <span class="icon">📥</span> Import Soal
+    </a>
+    <a href="#" onclick="showTab('settings')" id="tab-settings">
+      <span class="icon">⚙️</span> Pengaturan
+    </a>
+    <a href="#" onclick="showTab('scoreboard')" id="tab-scoreboard">
+      <span class="icon">🏆</span> Papan Skor
+    </a>
+    <div class="separator"></div>
+    <span class="sidebar-title">Info</span>
+    <div style="padding:8px 12px;font-size:0.78rem;color:#6b7280;line-height:1.6">
+      Status: <span id="sidebarStatus" style="font-weight:600;color:#166534">Idle</span><br>
+      Timer: <span id="sidebarTimer">—</span>
+    </div>
+  </nav>
+
+  <!-- ─── Main Content ─────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- ══════════════ TAB: GAME CONTROL ══════════════ -->
+    <div class="tab-content active" id="tabGame">
+      <div class="page-title"><span class="icon">🎮</span> Kontrol Game</div>
+
+      <!-- Start Game Panel -->
+      <div class="control-panel">
+        <div class="panel-title">
+          🚀 Mulai Ronde Baru
+          <span class="control-status" id="gameStatus">● IDLE</span>
+        </div>
+
+        <div class="grid-2" style="gap:12px;margin-bottom:16px;">
+          <div class="form-group mb-0">
+            <label class="form-label" style="color:rgba(255,255,255,0.7)">Pilih Soal</label>
+            <select class="form-control" id="selectQuestion">
+              <option value="">— Pilih soal —</option>
+            </select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label" style="color:rgba(255,255,255,0.7)">Tim yang Bermain</label>
+            <select class="form-control" id="selectTeam">
+              <option value="">— Pilih tim —</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-buttons">
+          <button class="btn btn-gold btn-lg" onclick="startGame()">▶ MULAI RONDE</button>
+          <button class="btn btn-outline btn-lg" onclick="pauseTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">⏸ Pause Timer</button>
+          <button class="btn btn-outline btn-lg" onclick="resumeTimer()" style="border-color:rgba(255,255,255,0.3);color:white;">▶ Resume Timer</button>
+          <button class="btn btn-danger btn-lg" onclick="endRound()">⏹ Akhiri Ronde</button>
+        </div>
+      </div>
+
+      <!-- Two Column Layout -->
+      <div class="grid-2">
+
+        <!-- Left: Answers to reveal -->
+        <div class="card">
+          <div class="card-title">✅ Ungkap Jawaban</div>
+          <div class="answer-buttons" id="adminAnswerList">
+            <div class="text-soft text-center">Pilih soal dan mulai ronde terlebih dahulu</div>
+          </div>
+        </div>
+
+        <!-- Right: Strike + Timer -->
+        <div>
+          <!-- Timer Card -->
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-title">⏱️ Timer</div>
+            <div class="timer-control">
+              <div class="timer-display-admin" id="adminTimer">—</div>
+              <div style="flex:1">
+                <div style="font-size:0.8rem;color:#6b7280;margin-bottom:8px;">Sisa waktu</div>
+                <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+                  <div id="adminTimerBar" style="height:100%;background:#22c55e;width:100%;transition:width 0.9s linear;border-radius:4px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strike Card -->
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-title">❌ Sistem Strike</div>
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+              <div id="adminStrikesDisplay" style="display:flex;gap:8px;"></div>
+              <div style="font-size:0.85rem;color:#6b7280;" id="strikeInfo">0 / 3 strike</div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn-strike" onclick="addStrike()">❌ STRIKE</button>
+              <button class="btn-steal-mode" onclick="activateSteal()">⚡ Mode Steal</button>
+            </div>
+          </div>
+
+          <!-- Award points card -->
+          <div class="card">
+            <div class="card-title">💰 Beri Poin ke Tim</div>
+            <div id="awardPointsSection">
+              <div class="text-soft">Mulai ronde terlebih dahulu</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══════════════ TAB: QUESTIONS ══════════════ -->
+    <div class="tab-content" id="tabQuestions">
+      <div class="flex-between" style="margin-bottom:20px;">
+        <div class="page-title" style="margin:0"><span class="icon">📋</span> Kelola Soal</div>
+        <button class="btn btn-primary" onclick="openAddQuestion()">➕ Tambah Soal</button>
+      </div>
+
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:12px;">
+          <input type="text" class="form-control" id="searchQuestion" placeholder="🔍 Cari soal..." style="max-width:300px;" oninput="filterQuestions()" />
+          <select class="form-control" id="filterCategory" style="max-width:180px;" onchange="filterQuestions()">
+            <option value="">Semua Kategori</option>
+          </select>
+        </div>
+        <div class="question-list" id="questionList">
+          <div class="text-soft text-center" style="padding:30px;">Memuat soal...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ TAB: TEAMS ══════════════ -->
+    <div class="tab-content" id="tabTeams">
+      <div class="flex-between" style="margin-bottom:20px;">
+        <div class="page-title" style="margin:0"><span class="icon">👥</span> Kelola Tim</div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-outline-red" onclick="resetAllScores()">🔄 Reset Semua Skor</button>
+          <button class="btn btn-primary" onclick="openAddTeam()">➕ Tambah Tim</button>
+        </div>
+      </div>
+
+      <div class="grid-2" id="teamList">
+        <div class="text-soft text-center" style="padding:30px;">Memuat tim...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════ TAB: IMPORT ══════════════ -->
+    <div class="tab-content" id="tabImport">
+      <div class="page-title"><span class="icon">📥</span> Import Soal (Format Tempel)</div>
+
+      <div class="card">
+        <div class="card-title">📋 Format Template</div>
+        <p style="font-size:0.85rem;color:#6b7280;margin-bottom:12px;">
+          Salin format di bawah, isi soal dan jawaban kamu, lalu tempel ke kolom import. Pisahkan setiap soal dengan <strong>baris kosong</strong>.
+        </p>
+
+        <div class="import-template">SOAL: [Tulis pertanyaanmu di sini]
+KATEGORI: [Contoh: Agama Islam / TIK / IPA / Umum]
+WAKTU: 60
+JAWABAN:
+[Jawaban 1] | [Poin]
+[Jawaban 2] | [Poin]
+[Jawaban 3] | [Poin]
+[Jawaban 4] | [Poin]
+[Jawaban 5] | [Poin]</div>
+
+        <div class="card" style="background:#fffbeb;border-color:#fcd34d;margin-bottom:0;">
+          <div class="card-title" style="border-color:#fcd34d;">💡 Contoh Nyata</div>
+          <div class="import-template" style="background:#1e3a5f;border-color:#3b82f6;">SOAL: Sebutkan komponen dalam jaringan komputer!
+KATEGORI: TIK / Coding
+WAKTU: 60
+JAWABAN:
+Router | 30
+Switch | 25
+Kabel LAN | 20
+Modem | 15
+Access Point | 10
+
+SOAL: Sebutkan jenis-jenis bilangan dalam matematika!
+KATEGORI: Matematika
+WAKTU: 60
+JAWABAN:
+Bilangan Bulat | 30
+Bilangan Pecahan | 25
+Bilangan Prima | 20
+Bilangan Real | 15
+Bilangan Irasional | 10</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 Area Import — Tempel di sini</div>
+        <textarea class="form-control" id="importText" rows="18"
+          placeholder="Tempel soal-soal kamu di sini sesuai format di atas..."></textarea>
+
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-lg" onclick="importQuestions()">📥 Import Sekarang</button>
+          <button class="btn btn-outline" onclick="$('importText').value=''">🗑️ Bersihkan</button>
+          <button class="btn btn-outline" onclick="pasteTemplate()">📋 Tempel Template Kosong</button>
+        </div>
+
+        <div class="import-result" id="importResult"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ TAB: SETTINGS ══════════════ -->
+    <div class="tab-content" id="tabSettings">
+      <div class="page-title"><span class="icon">⚙️</span> Pengaturan</div>
+
+      <div class="card">
+        <div class="card-title">🏫 Informasi Sekolah</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Nama Sekolah</label>
+            <input type="text" class="form-control" id="settingSchoolName" value="MTS Al Husna" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Judul Aplikasi</label>
+            <input type="text" class="form-control" id="settingAppTitle" value="KUIS FAMILY 100" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎮 Pengaturan Game</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Batas Waktu Default (detik)</label>
+            <input type="number" class="form-control" id="settingDefaultTime" value="60" min="10" max="300" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Maksimal Strike</label>
+            <input type="number" class="form-control" id="settingMaxStrikes" value="3" min="1" max="5" />
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg" onclick="saveSettings()">💾 Simpan Pengaturan</button>
+    </div>
+
+    <!-- ══════════════ TAB: SCOREBOARD ══════════════ -->
+    <div class="tab-content" id="tabScoreboard">
+      <div class="page-title"><span class="icon">🏆</span> Papan Skor</div>
+      <div id="scoreboardList"></div>
+      <div style="margin-top:20px;display:flex;gap:10px;">
+        <button class="btn btn-outline-red" onclick="resetAllScores()">🔄 Reset Semua Skor</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ─── Modal: Tambah/Edit Soal ───────────────────── -->
+<div class="modal-backdrop" id="questionModal">
+  <div class="modal">
+    <div class="modal-title" id="questionModalTitle">➕ Tambah Soal</div>
+
+    <div class="form-group">
+      <label class="form-label">Pertanyaan *</label>
+      <textarea class="form-control" id="qQuestion" rows="2" placeholder="Tulis pertanyaan di sini..."></textarea>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Kategori</label>
+        <input type="text" class="form-control" id="qCategory" placeholder="Contoh: Agama Islam" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Batas Waktu (detik)</label>
+        <input type="number" class="form-control" id="qTimeLimit" value="60" min="10" max="300" />
+      </div>
+    </div>
+
+    <div class="card-title" style="margin-top:8px;">Jawaban (urutan dari poin tertinggi)</div>
+    <div id="answerInputs"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="btn btn-outline btn-sm" onclick="addAnswerInput()">➕ Tambah Jawaban</button>
+      <span style="font-size:0.8rem;color:#6b7280;align-self:center;">Maks 8 jawaban</span>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('questionModal')">Batal</button>
+      <button class="btn btn-primary" id="saveQuestionBtn" onclick="saveQuestion()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Modal: Tambah/Edit Tim ────────────────────── -->
+<div class="modal-backdrop" id="teamModal">
+  <div class="modal">
+    <div class="modal-title" id="teamModalTitle">➕ Tambah Tim</div>
+
+    <div class="form-group">
+      <label class="form-label">Nama Tim *</label>
+      <input type="text" class="form-control" id="tName" placeholder="Contoh: Tim Al Fatihah" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Warna Tim</label>
+      <div class="color-swatches" id="colorSwatches"></div>
+      <input type="color" class="form-control mt-12" id="tColor" value="#22c55e" style="height:44px;" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Skor Awal</label>
+      <input type="number" class="form-control" id="tScore" value="0" min="0" />
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('teamModal')">Batal</button>
+      <button class="btn btn-primary" id="saveTeamBtn" onclick="saveTeam()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Toast Container ───────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/sounds.js"></script>
+<script>
+// ════════════════════════════════════════════════
+// ADMIN PANEL — Full Control
+// ════════════════════════════════════════════════
+const socket = io();
+
+// Global state
+let allQuestions = [];
+let allTeams = [];
+let settings = {};
+let gameState = null;
+let editingQuestionId = null;
+let editingTeamId = null;
+let timerMax = 60;
+
+const TEAM_COLORS = [
+  '#22c55e','#2563eb','#dc2626','#f59e0b',
+  '#8b5cf6','#ec4899','#06b6d4','#f97316'
+];
+
+// ─── Socket Events ──────────────────────────────
+socket.on('game:state', (s) => { updateGameUI(s); });
+socket.on('game:timer', ({ remaining }) => { updateAdminTimer(remaining); });
+socket.on('game:timesup', () => {
+  toast('⏰ Waktu Habis!', 'info');
+  SoundEngine.timesUp();
+});
+socket.on('game:celebration', ({ team_id, points }) => {
+  const t = allTeams.find(t => t.id === team_id);
+  toast(`🎉 ${t?.name || 'Tim'} mendapat ${points} poin!`, 'success');
+  SoundEngine.celebrate();
+  setTimeout(loadTeams, 500);
+});
+
+// ─── Tab Navigation ─────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.sidebar a').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab${name.charAt(0).toUpperCase() + name.slice(1)}`).classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+  return false;
+}
+
+// ─── Initial Load ────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  await Promise.all([loadSettings(), loadQuestions(), loadTeams(), loadGameState()]);
+  buildColorSwatches();
+  buildDefaultAnswerInputs();
+});
+
+// ─── API Helpers ─────────────────────────────────
+async function api(method, url, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+// ─── Load Data ───────────────────────────────────
+async function loadGameState() {
+  gameState = await api('GET', '/api/game/state');
+  updateGameUI(gameState);
+}
+
+async function loadQuestions() {
+  allQuestions = await api('GET', '/api/questions');
+  renderQuestions();
+  populateQuestionDropdown();
+}
+
+async function loadTeams() {
+  allTeams = await api('GET', '/api/teams');
+  renderTeams();
+  populateTeamDropdown();
+  renderScoreboard();
+}
+
+async function loadSettings() {
+  settings = await api('GET', '/api/settings');
+  applySettings();
+}
+
+// ─── Game Controls ───────────────────────────────
+async function startGame() {
+  const qId = document.getElementById('selectQuestion').value;
+  const tId = document.getElementById('selectTeam').value;
+  if (!qId) return toast('Pilih soal terlebih dahulu', 'error');
+  if (!tId) return toast('Pilih tim terlebih dahulu', 'error');
+
+  SoundEngine.gameStart();
+  const res = await api('POST', '/api/game/start', { question_id: +qId, active_team_id: +tId });
+  if (res.error) return toast(res.error, 'error');
+  gameState = res;
+  updateGameUI(res);
+  toast('🚀 Ronde dimulai!', 'success');
+}
+
+async function addStrike() {
+  if (!gameState?.game?.question_id) return toast('Tidak ada game yang aktif', 'error');
+  SoundEngine.strike();
+  const res = await api('POST', '/api/game/strike');
+  if (res.error) return toast(res.error, 'error');
+  gameState = res;
+  updateGameUI(res);
+
+  if (res.game?.phase === 'steal') {
+    toast('⚡ Mode Steal diaktifkan!', 'info');
+  }
+}
+
+async function activateSteal() {
+  // Manually activate steal - find the other team
+  if (!gameState?.game?.question_id) return toast('Tidak ada game yang aktif', 'error');
+  SoundEngine.stealMode();
+  // Force max strikes to trigger steal
+  const maxStrikes = parseInt(settings.max_strikes) || 3;
+  const currentStrikes = gameState?.game?.strikes || 0;
+  const needed = maxStrikes - currentStrikes;
+  for (let i = 0; i < needed; i++) {
+    await api('POST', '/api/game/strike');
+  }
+  toast('⚡ Mode Steal diaktifkan!', 'info');
+  await loadGameState();
+}
+
+async function revealAnswer(answerId) {
+  SoundEngine.correct();
+  const res = await api('POST', `/api/game/reveal/${answerId}`);
+  if (res.error) return toast(res.error, 'error');
+  updateGameUI(res);
+  toast('✅ Jawaban terungkap!', 'success');
+}
+
+async function pauseTimer() {
+  await api('POST', '/api/game/pause');
+  toast('⏸ Timer dijeda', 'info');
+}
+
+async function resumeTimer() {
+  await api('POST', '/api/game/resume');
+  toast('▶ Timer dilanjutkan', 'info');
+}
+
+async function endRound() {
+  if (!gameState?.game?.question_id) return toast('Tidak ada game yang aktif', 'error');
+  const confirmed = confirm('Akhiri ronde sekarang? Poin belum diberikan otomatis.');
+  if (!confirmed) return;
+  await api('POST', '/api/game/end');
+  toast('⏹ Ronde diakhiri', 'info');
+  setTimeout(loadTeams, 500);
+}
+
+async function awardPointsToTeam(teamId) {
+  const points = gameState?.game?.round_points || 0;
+  if (points <= 0) return toast('Tidak ada poin untuk diberikan', 'error');
+  const team = allTeams.find(t => t.id === teamId);
+  const confirmed = confirm(`Berikan ${points} poin ke ${team?.name}?`);
+  if (!confirmed) return;
+  await api('POST', `/api/teams/${teamId}/add-score`, { points });
+  await api('POST', '/api/game/end', { award_to_team: teamId });
+  SoundEngine.celebrate();
+  toast(`🎉 ${points} poin diberikan ke ${team?.name}!`, 'success');
+  setTimeout(() => { loadTeams(); loadGameState(); }, 500);
+}
+
+async function resetGame() {
+  const confirmed = confirm('Reset game? State game akan kembali ke idle.');
+  if (!confirmed) return;
+  await api('POST', '/api/game/reset');
+  toast('🔄 Game direset', 'info');
+  setTimeout(loadGameState, 300);
+}
+
+// ─── Update Game UI ───────────────────────────────
+function updateGameUI(s) {
+  if (!s) return;
+  gameState = s;
+  const game = s.game;
+
+  // Status badge
+  const statusEl = document.getElementById('gameStatus');
+  const statusMap = {
+    idle: '● IDLE', playing: '● BERMAIN', steal: '⚡ STEAL',
+    finished: '✓ SELESAI', timesup: '⏰ WAKTU HABIS'
+  };
+  const statusClass = { idle:'idle', playing:'playing', steal:'steal', finished:'finished', timesup:'timesup' };
+  statusEl.textContent = statusMap[game.phase] || game.phase.toUpperCase();
+  statusEl.className = `control-status ${statusClass[game.phase] || ''}`;
+
+  // Sidebar
+  document.getElementById('sidebarStatus').textContent = statusMap[game.phase] || game.phase;
+  document.getElementById('sidebarTimer').textContent = game.timer_remaining ? `${game.timer_remaining}s` : '—';
+
+  // Admin answer list
+  renderAdminAnswers(s.answers, game);
+
+  // Strikes
+  renderAdminStrikes(game, s.settings);
+
+  // Award points section
+  renderAwardPoints(game, s.teams);
+
+  // Timer
+  updateAdminTimer(game.timer_remaining, s.question?.time_limit);
+}
+
+function renderAdminAnswers(answers, game) {
+  const list = document.getElementById('adminAnswerList');
+  if (!answers || answers.length === 0) {
+    list.innerHTML = '<div class="text-soft text-center">Pilih soal dan mulai ronde terlebih dahulu</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  answers.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = `answer-btn ${a.revealed ? 'revealed' : ''}`;
+    btn.disabled = a.revealed || game.phase === 'idle' || game.phase === 'finished';
+    btn.innerHTML = `
+      <span class="a-rank">#${a.rank}</span>
+      <span class="a-text">${a.answer}</span>
+      <span class="a-pts">${a.points} poin</span>
+      ${a.revealed ? '<span class="a-check">✓</span>' : ''}
+    `;
+    if (!a.revealed) btn.onclick = () => revealAnswer(a.id);
+    list.appendChild(btn);
+  });
+}
+
+function renderAdminStrikes(game, s) {
+  const maxStrikes = parseInt((s || settings)?.max_strikes) || 3;
+  const display = document.getElementById('adminStrikesDisplay');
+  const info = document.getElementById('strikeInfo');
+  display.innerHTML = '';
+  for (let i = 0; i < maxStrikes; i++) {
+    const el = document.createElement('div');
+    el.style.cssText = `width:36px;height:36px;border-radius:50%;border:2px solid ${i < game.strikes ? '#dc2626' : '#e5e7eb'};
+      background:${i < game.strikes ? 'rgba(220,38,38,0.1)' : 'transparent'};
+      display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:${i < game.strikes ? '#dc2626' : 'transparent'};`;
+    el.textContent = i < game.strikes ? '✕' : '';
+    display.appendChild(el);
+  }
+  info.textContent = `${game.strikes} / ${maxStrikes} strike`;
+}
+
+function renderAwardPoints(game, teams) {
+  const section = document.getElementById('awardPointsSection');
+  if (!game.question_id || game.phase === 'idle') {
+    section.innerHTML = '<div class="text-soft">Mulai ronde terlebih dahulu</div>';
+    return;
+  }
+  const pts = game.round_points || 0;
+  section.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <div class="text-soft">Total poin terkumpul dalam ronde ini:</div>
+      <div class="round-points-big">${pts} Poin</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${(teams || allTeams).map(t => `
+        <button class="btn btn-success btn-full" onclick="awardPointsToTeam(${t.id})" style="background:${t.color};">
+          🏆 Beri ${pts} Poin ke ${t.name}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function updateAdminTimer(remaining, max) {
+  if (max) timerMax = max;
+  const el = document.getElementById('adminTimer');
+  const bar = document.getElementById('adminTimerBar');
+  if (!el) return;
+  const secs = Math.max(0, remaining || 0);
+  el.textContent = secs + 's';
+  el.style.color = secs <= 10 ? '#dc2626' : secs <= 20 ? '#d97706' : '#fcd34d';
+  if (bar) {
+    const pct = (secs / timerMax) * 100;
+    bar.style.width = pct + '%';
+    bar.style.background = secs <= 10 ? '#dc2626' : secs <= 20 ? '#d97706' : '#22c55e';
+  }
+  document.getElementById('sidebarTimer').textContent = secs + 's';
+}
+
+// ─── Dropdowns ───────────────────────────────────
+function populateQuestionDropdown() {
+  const sel = document.getElementById('selectQuestion');
+  sel.innerHTML = '<option value="">— Pilih soal —</option>';
+  allQuestions.forEach(q => {
+    const opt = document.createElement('option');
+    opt.value = q.id;
+    opt.textContent = `[${q.category}] ${q.question}`;
+    sel.appendChild(opt);
+  });
+}
+
+function populateTeamDropdown() {
+  const sel = document.getElementById('selectTeam');
+  sel.innerHTML = '<option value="">— Pilih tim —</option>';
+  allTeams.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ─── Questions UI ─────────────────────────────────
+function renderQuestions() {
+  const list = document.getElementById('questionList');
+  const categories = [...new Set(allQuestions.map(q => q.category))];
+
+  // Populate filter
+  const filter = document.getElementById('filterCategory');
+  filter.innerHTML = '<option value="">Semua Kategori</option>';
+  categories.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    filter.appendChild(opt);
+  });
+
+  if (allQuestions.length === 0) {
+    list.innerHTML = '<div class="text-soft text-center" style="padding:30px;">Belum ada soal. Tambahkan atau import soal!</div>';
+    return;
+  }
+
+  displayFilteredQuestions(allQuestions);
+}
+
+function filterQuestions() {
+  const search = document.getElementById('searchQuestion').value.toLowerCase();
+  const category = document.getElementById('filterCategory').value;
+  const filtered = allQuestions.filter(q => {
+    const matchSearch = q.question.toLowerCase().includes(search);
+    const matchCat = !category || q.category === category;
+    return matchSearch && matchCat;
+  });
+  displayFilteredQuestions(filtered);
+}
+
+function displayFilteredQuestions(questions) {
+  const list = document.getElementById('questionList');
+  list.innerHTML = '';
+  if (questions.length === 0) {
+    list.innerHTML = '<div class="text-soft text-center" style="padding:20px;">Tidak ada soal yang ditemukan</div>';
+    return;
+  }
+  questions.forEach(q => {
+    const item = document.createElement('div');
+    item.className = 'question-item';
+    item.innerHTML = `
+      <div class="q-meta">
+        <div class="q-text">${q.question}</div>
+        <div class="q-info">
+          <span class="badge badge-green">${q.category || 'Umum'}</span>
+          <span>⏱ ${q.time_limit}s</span>
+          <span>📝 ${q.answers?.length || 0} jawaban</span>
+        </div>
+      </div>
+      <div class="q-actions">
+        <button class="btn btn-outline btn-sm" onclick="selectAndPlay(${q.id})">▶ Main</button>
+        <button class="btn btn-outline btn-sm" onclick="openEditQuestion(${q.id})">✏️</button>
+        <button class="btn btn-outline-red btn-sm" onclick="deleteQuestion(${q.id})">🗑️</button>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function selectAndPlay(questionId) {
+  const sel = document.getElementById('selectQuestion');
+  sel.value = questionId;
+  showTab('game');
+  toast('Soal dipilih! Pilih tim dan klik Mulai Ronde.', 'info');
+}
+
+// ─── Question Modal ───────────────────────────────
+function openAddQuestion() {
+  editingQuestionId = null;
+  document.getElementById('questionModalTitle').textContent = '➕ Tambah Soal Baru';
+  document.getElementById('qQuestion').value = '';
+  document.getElementById('qCategory').value = '';
+  document.getElementById('qTimeLimit').value = settings.default_time || 60;
+  buildDefaultAnswerInputs();
+  openModal('questionModal');
+}
+
+async function openEditQuestion(id) {
+  editingQuestionId = id;
+  const q = allQuestions.find(q => q.id === id);
+  if (!q) return;
+
+  document.getElementById('questionModalTitle').textContent = '✏️ Edit Soal';
+  document.getElementById('qQuestion').value = q.question;
+  document.getElementById('qCategory').value = q.category || '';
+  document.getElementById('qTimeLimit').value = q.time_limit;
+
+  const container = document.getElementById('answerInputs');
+  container.innerHTML = '';
+  (q.answers || []).forEach(a => addAnswerInput(a.answer, a.points));
+  while (container.querySelectorAll('.answer-input-row').length < 5) addAnswerInput();
+
+  openModal('questionModal');
+}
+
+function buildDefaultAnswerInputs() {
+  const container = document.getElementById('answerInputs');
+  container.innerHTML = '';
+  for (let i = 0; i < 5; i++) addAnswerInput();
+}
+
+function addAnswerInput(answer = '', points = '') {
+  const container = document.getElementById('answerInputs');
+  if (container.querySelectorAll('.answer-input-row').length >= 8) return;
+  const count = container.querySelectorAll('.answer-input-row').length + 1;
+  const row = document.createElement('div');
+  row.className = 'answer-input-row';
+  row.innerHTML = `
+    <div class="rank-num">${count}</div>
+    <input type="text" class="form-control" placeholder="Jawaban #${count}" value="${answer}" />
+    <input type="number" class="form-control" placeholder="Poin" value="${points}" min="1" max="100" />
+    <button class="btn btn-outline-red btn-sm" onclick="this.parentElement.remove();renumberAnswers()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function renumberAnswers() {
+  document.querySelectorAll('#answerInputs .answer-input-row').forEach((row, i) => {
+    row.querySelector('.rank-num').textContent = i + 1;
+    row.querySelector('input[type=text]').placeholder = `Jawaban #${i + 1}`;
+  });
+}
+
+async function saveQuestion() {
+  const question = document.getElementById('qQuestion').value.trim();
+  const category = document.getElementById('qCategory').value.trim() || 'Umum';
+  const time_limit = parseInt(document.getElementById('qTimeLimit').value) || 60;
+
+  if (!question) return toast('Pertanyaan tidak boleh kosong', 'error');
+
+  const rows = document.querySelectorAll('#answerInputs .answer-input-row');
+  const answers = [];
+  rows.forEach(row => {
+    const text = row.querySelectorAll('input')[0].value.trim();
+    const pts = parseInt(row.querySelectorAll('input')[1].value) || 10;
+    if (text) answers.push({ answer: text, points: pts });
+  });
+
+  if (answers.length < 1) return toast('Tambahkan minimal 1 jawaban', 'error');
+
+  const data = { question, category, time_limit, answers };
+  let res;
+  if (editingQuestionId) {
+    res = await api('PUT', `/api/questions/${editingQuestionId}`, data);
+  } else {
+    res = await api('POST', '/api/questions', data);
+  }
+
+  if (res.error) return toast(res.error, 'error');
+  closeModal('questionModal');
+  await loadQuestions();
+  toast(editingQuestionId ? '✏️ Soal diperbarui!' : '✅ Soal ditambahkan!', 'success');
+}
+
+async function deleteQuestion(id) {
+  const q = allQuestions.find(q => q.id === id);
+  if (!confirm(`Hapus soal: "${q?.question}"?`)) return;
+  await api('DELETE', `/api/questions/${id}`);
+  await loadQuestions();
+  toast('🗑️ Soal dihapus', 'info');
+}
+
+// ─── Teams UI ─────────────────────────────────────
+function renderTeams() {
+  const list = document.getElementById('teamList');
+  if (allTeams.length === 0) {
+    list.innerHTML = '<div class="text-soft text-center" style="padding:30px;">Belum ada tim</div>';
+    return;
+  }
+  list.innerHTML = allTeams.map(t => `
+    <div class="team-card" style="border-color:${t.color}22;">
+      <div class="team-dot" style="background:${t.color}22;color:${t.color};">👥</div>
+      <div class="team-info">
+        <div class="t-name" style="color:${t.color};">${t.name}</div>
+        <div class="t-score">Skor: <strong>${t.score}</strong> poin</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="adjustScore(${t.id})">± Skor</button>
+        <button class="btn btn-outline btn-sm" onclick="openEditTeam(${t.id})">✏️</button>
+        <button class="btn btn-outline-red btn-sm" onclick="deleteTeam(${t.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderScoreboard() {
+  const list = document.getElementById('scoreboardList');
+  const sorted = [...allTeams].sort((a, b) => b.score - a.score);
+  const medals = ['🥇', '🥈', '🥉'];
+  list.innerHTML = sorted.map((t, i) => `
+    <div class="score-rank">
+      <div class="rank-num">${medals[i] || (i + 1)}</div>
+      <div class="rank-name" style="color:${t.color};">${t.name}</div>
+      <div class="rank-score">${t.score}</div>
+    </div>
+  `).join('');
+}
+
+function openAddTeam() {
+  editingTeamId = null;
+  document.getElementById('teamModalTitle').textContent = '➕ Tambah Tim Baru';
+  document.getElementById('tName').value = '';
+  document.getElementById('tColor').value = '#22c55e';
+  document.getElementById('tScore').value = '0';
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  openModal('teamModal');
+}
+
+function openEditTeam(id) {
+  editingTeamId = id;
+  const t = allTeams.find(t => t.id === id);
+  if (!t) return;
+  document.getElementById('teamModalTitle').textContent = '✏️ Edit Tim';
+  document.getElementById('tName').value = t.name;
+  document.getElementById('tColor').value = t.color;
+  document.getElementById('tScore').value = t.score;
+  document.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('selected', s.dataset.color === t.color);
+  });
+  openModal('teamModal');
+}
+
+async function saveTeam() {
+  const name = document.getElementById('tName').value.trim();
+  const color = document.getElementById('tColor').value;
+  const score = parseInt(document.getElementById('tScore').value) || 0;
+  if (!name) return toast('Nama tim tidak boleh kosong', 'error');
+
+  let res;
+  if (editingTeamId) {
+    res = await api('PUT', `/api/teams/${editingTeamId}`, { name, color, score });
+  } else {
+    res = await api('POST', '/api/teams', { name, color });
+    if (!res.error) await api('PUT', `/api/teams/${res.id}`, { name, color, score });
+  }
+
+  if (res.error) return toast(res.error, 'error');
+  closeModal('teamModal');
+  await loadTeams();
+  toast(editingTeamId ? '✏️ Tim diperbarui!' : '✅ Tim ditambahkan!', 'success');
+}
+
+async function deleteTeam(id) {
+  const t = allTeams.find(t => t.id === id);
+  if (!confirm(`Hapus tim "${t?.name}"?`)) return;
+  await api('DELETE', `/api/teams/${id}`);
+  await loadTeams();
+  toast('🗑️ Tim dihapus', 'info');
+}
+
+async function adjustScore(id) {
+  const t = allTeams.find(t => t.id === id);
+  const delta = prompt(`Tambah/kurangi skor ${t?.name}:\n(angka negatif untuk mengurangi)`, '0');
+  if (delta === null) return;
+  const pts = parseInt(delta);
+  if (isNaN(pts)) return toast('Masukkan angka yang valid', 'error');
+  await api('POST', `/api/teams/${id}/add-score`, { points: pts });
+  await loadTeams();
+  toast(`Skor ${t?.name} diperbarui`, 'success');
+}
+
+async function resetAllScores() {
+  if (!confirm('Reset semua skor ke 0?')) return;
+  await api('POST', '/api/teams/reset-scores');
+  await loadTeams();
+  toast('🔄 Semua skor direset ke 0', 'info');
+}
+
+// ─── Import ───────────────────────────────────────
+async function importQuestions() {
+  const text = document.getElementById('importText').value.trim();
+  if (!text) return toast('Tempel soal terlebih dahulu', 'error');
+
+  const res = await api('POST', '/api/questions/import', { text });
+  const resultEl = document.getElementById('importResult');
+  resultEl.className = 'import-result visible ' + (res.errors?.length && !res.imported ? 'error' : 'success');
+
+  let html = `<strong>${res.imported} soal berhasil diimport!</strong>`;
+  if (res.questions?.length) {
+    html += '<ul style="margin-top:8px;padding-left:20px;">';
+    res.questions.forEach(q => { html += `<li>${q}</li>`; });
+    html += '</ul>';
+  }
+  if (res.errors?.length) {
+    html += `<div style="margin-top:8px;color:#dc2626;"><strong>Peringatan:</strong><ul style="padding-left:20px;">`;
+    res.errors.forEach(e => { html += `<li>${e}</li>`; });
+    html += '</ul></div>';
+  }
+  resultEl.innerHTML = html;
+
+  if (res.imported > 0) {
+    await loadQuestions();
+    toast(`✅ ${res.imported} soal berhasil diimport!`, 'success');
+  }
+}
+
+function pasteTemplate() {
+  document.getElementById('importText').value =
+`SOAL: [Tulis pertanyaanmu di sini]
+KATEGORI: [Contoh: TIK / Agama Islam / IPA]
+WAKTU: 60
+JAWABAN:
+[Jawaban 1] | [Poin]
+[Jawaban 2] | [Poin]
+[Jawaban 3] | [Poin]
+[Jawaban 4] | [Poin]
+[Jawaban 5] | [Poin]`;
+}
+
+// ─── Settings ─────────────────────────────────────
+function applySettings() {
+  if (settings.school_name)    document.getElementById('settingSchoolName').value = settings.school_name;
+  if (settings.app_title)      document.getElementById('settingAppTitle').value = settings.app_title;
+  if (settings.default_time)   document.getElementById('settingDefaultTime').value = settings.default_time;
+  if (settings.max_strikes)    document.getElementById('settingMaxStrikes').value = settings.max_strikes;
+}
+
+async function saveSettings() {
+  const data = {
+    school_name:   document.getElementById('settingSchoolName').value,
+    app_title:     document.getElementById('settingAppTitle').value,
+    default_time:  document.getElementById('settingDefaultTime').value,
+    max_strikes:   document.getElementById('settingMaxStrikes').value,
+  };
+  settings = await api('PUT', '/api/settings', data);
+  toast('💾 Pengaturan disimpan!', 'success');
+}
+
+// ─── Color Swatches ───────────────────────────────
+function buildColorSwatches() {
+  const container = document.getElementById('colorSwatches');
+  TEAM_COLORS.forEach(color => {
+    const s = document.createElement('div');
+    s.className = 'color-swatch';
+    s.dataset.color = color;
+    s.style.background = color;
+    s.onclick = () => {
+      document.getElementById('tColor').value = color;
+      document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('selected'));
+      s.classList.add('selected');
+    };
+    container.appendChild(s);
+  });
+}
+
+// ─── Modal Helpers ────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('visible'); }
+function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('visible'); });
+});
+
+// ─── Toast Notifications ──────────────────────────
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ─── Shorthand ────────────────────────────────────
+function $(id) { return document.getElementById(id); }
+</script>
+</body>
+</html>

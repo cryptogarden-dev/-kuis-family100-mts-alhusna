@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KUIS FAMILY 100 - MTS Al Husna</title>
+  <link rel="stylesheet" href="/css/game.css" />
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────── -->
+<header class="game-header">
+  <div class="header-logo">
+    <span class="logo-icon">🌙</span>
+    <div class="header-title">
+      <span class="app-title">KUIS FAMILY 100</span>
+      <span class="school-name" id="schoolName">MTS Al Husna</span>
+    </div>
+  </div>
+  <div class="header-decoration">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="round-points" id="headerPoints" style="display:none">
+      💰 Poin Ronde: <span id="roundPointsVal">0</span>
+    </div>
+    <a href="/admin" style="color:rgba(255,255,255,0.5);font-size:0.75rem;text-decoration:none;border:1px solid rgba(255,255,255,0.2);padding:4px 10px;border-radius:6px;">⚙️ Admin</a>
+  </div>
+</header>
+
+<!-- ─── Main Area ────────────────────────────────────── -->
+<main class="game-main" id="gameMain">
+
+  <!-- Question -->
+  <section class="question-section" id="questionSection">
+    <p class="question-text" id="questionText">
+      <span class="question-placeholder">Selamat datang! Tunggu guru memulai permainan...</span>
+    </p>
+  </section>
+
+  <!-- Left Team Panel -->
+  <div class="team-panel" id="teamPanel0" style="color:#22c55e;border-color:rgba(34,197,94,0.4);">
+    <div class="team-name" id="teamName0">Tim 1</div>
+    <div class="team-score" id="teamScore0">0</div>
+    <div class="team-score-label">POIN</div>
+  </div>
+
+  <!-- Answers Board -->
+  <section class="answers-section" id="answersSection">
+    <!-- Idle Screen when no game -->
+    <div class="idle-screen" id="idleScreen">
+      <div class="idle-icon">🎯</div>
+      <div class="idle-title">KUIS FAMILY 100</div>
+      <div class="idle-sub">MTS Al Husna — Siap Belajar Sambil Bermain!</div>
+    </div>
+  </section>
+
+  <!-- Right Team Panel -->
+  <div class="team-panel" id="teamPanel1" style="color:#2563eb;border-color:rgba(37,99,235,0.4);">
+    <div class="team-name" id="teamName1">Tim 2</div>
+    <div class="team-score" id="teamScore1">0</div>
+    <div class="team-score-label">POIN</div>
+  </div>
+
+  <!-- Steal Banner -->
+  <div class="steal-banner" id="stealBanner">
+    <div class="steal-banner-text">⚡ MODE STEAL — SATU JAWABAN UNTUK <span id="stealTeamName">Tim</span>! ⚡</div>
+  </div>
+
+  <!-- Timer + Strikes -->
+  <div class="timer-section" id="timerSection" style="display:none">
+    <div class="timer-ring">
+      <svg viewBox="0 0 80 80" width="80" height="80">
+        <circle class="timer-ring-bg" cx="40" cy="40" r="34"/>
+        <circle class="timer-ring-fill" id="timerRing" cx="40" cy="40" r="34"/>
+      </svg>
+      <div class="timer-number" id="timerNumber">60</div>
+    </div>
+    <div class="timer-label">DETIK</div>
+  </div>
+
+  <!-- Strikes Row -->
+  <div class="strike-section" id="strikesSection" style="display:none">
+    <span class="strike-label">KESALAHAN</span>
+    <div class="strikes-display" id="strikesDisplay"></div>
+    <span class="strike-label" id="maxStrikeLabel">&nbsp;</span>
+  </div>
+
+</main>
+
+<!-- ─── Status Overlay ───────────────────────────────── -->
+<div class="status-overlay" id="statusOverlay">
+  <div class="status-card">
+    <div class="status-icon" id="overlayIcon">🎉</div>
+    <div class="status-title" id="overlayTitle">Waktu Habis!</div>
+    <div class="status-sub" id="overlaySub">Ronde selesai</div>
+  </div>
+</div>
+
+<!-- ─── Confetti ─────────────────────────────────────── -->
+<div class="confetti-container" id="confettiContainer"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/sounds.js"></script>
+<script>
+// ════════════════════════════════════════════════
+// GAME SCREEN — Real-time display
+// ════════════════════════════════════════════════
+const socket = io();
+
+let state = null;
+let timerMax = 60;
+const CIRCUMFERENCE = 2 * Math.PI * 34; // ~213.6
+
+// DOM refs
+const $ = id => document.getElementById(id);
+
+// ─── Socket Events ──────────────────────────────
+socket.on('game:state', (s) => { state = s; renderAll(s); });
+
+socket.on('game:timer', ({ remaining }) => {
+  updateTimer(remaining);
+  // Tick sound when <= 10 seconds
+  if (remaining <= 10 && remaining > 0 && state?.game?.phase === 'playing') {
+    SoundEngine.timerWarning();
+  }
+});
+
+socket.on('game:timesup', () => {
+  SoundEngine.timesUp();
+  showOverlay('⏰', 'WAKTU HABIS!', 'Guru akan menentukan kelanjutan ronde');
+  setTimeout(() => hideOverlay(), 3000);
+});
+
+socket.on('game:celebration', ({ team_id, points }) => {
+  SoundEngine.celebrate();
+  const team = state?.teams?.find(t => t.id === team_id);
+  showOverlay('🎉', 'JAWABAN LENGKAP!', `${team?.name || 'Tim'} mendapat ${points} poin!`);
+  launchConfetti();
+  setTimeout(() => hideOverlay(), 4000);
+});
+
+socket.on('game:steal-mode', ({ steal_team }) => {
+  SoundEngine.stealMode();
+  showOverlay('⚡', 'MODE STEAL!', `${steal_team?.name || 'Tim lain'} dapat kesempatan mencuri!`);
+  setTimeout(() => hideOverlay(), 2500);
+});
+
+socket.on('game:steal-fail', () => {
+  SoundEngine.wrong();
+  showOverlay('❌', 'STEAL GAGAL!', 'Ronde selesai');
+  setTimeout(() => hideOverlay(), 2000);
+});
+
+// ─── Render Everything ──────────────────────────
+function renderAll(s) {
+  renderTeams(s.teams, s.game);
+  renderQuestion(s.question);
+  renderAnswers(s.answers, s.question, s.game);
+  renderStrikes(s.game, s.settings);
+  renderTimer(s.game);
+  renderStealBanner(s.game, s.teams);
+  updateSchoolName(s.settings);
+}
+
+function updateSchoolName(settings) {
+  if (settings?.school_name) $('schoolName').textContent = settings.school_name;
+}
+
+function renderTeams(teams, game) {
+  const panels = [$('teamPanel0'), $('teamPanel1')];
+  panels.forEach(p => { if (p) p.classList.remove('active'); });
+
+  teams.forEach((team, i) => {
+    if (i > 1) return; // max 2 panels on game screen
+    const panel = panels[i];
+    if (!panel) return;
+    panel.style.color = team.color;
+    panel.style.borderColor = hexToRgba(team.color, 0.4);
+    $(`teamName${i}`).textContent = team.name;
+    $(`teamScore${i}`).textContent = team.score;
+
+    const isActive = game.phase !== 'idle' && (
+      (game.phase !== 'steal' && game.active_team_id === team.id) ||
+      (game.phase === 'steal' && game.steal_team_id === team.id)
+    );
+    if (isActive) panel.classList.add('active');
+  });
+
+  // Round points display
+  const rpEl = $('headerPoints');
+  if (game.phase !== 'idle' && game.phase !== 'finished') {
+    rpEl.style.display = 'flex';
+    $('roundPointsVal').textContent = game.round_points || 0;
+  } else {
+    rpEl.style.display = 'none';
+  }
+}
+
+function renderQuestion(q) {
+  const el = $('questionText');
+  if (q) {
+    el.innerHTML = `<span>${q.question}</span>`;
+  } else {
+    el.innerHTML = `<span class="question-placeholder">Selamat datang! Tunggu guru memulai permainan...</span>`;
+  }
+}
+
+function renderAnswers(answers, question, game) {
+  const section = $('answersSection');
+  const idle = $('idleScreen');
+  const timer = $('timerSection');
+
+  if (game.phase === 'idle' || !question) {
+    section.innerHTML = '';
+    section.appendChild(idle || createIdleScreen());
+    if (idle) idle.style.display = 'flex';
+    timer.style.display = 'none';
+    return;
+  }
+
+  // Hide idle
+  const existing = $('idleScreen');
+  if (existing) existing.style.display = 'none';
+
+  // Build answer rows
+  const prev = section.querySelectorAll('.answer-row');
+  const prevIds = new Set([...prev].map(el => el.dataset.id));
+
+  // Clear and rebuild
+  section.innerHTML = '';
+
+  const maxAnswers = Math.min(answers.length, 8);
+  for (let i = 0; i < maxAnswers; i++) {
+    const a = answers[i];
+    const wasRevealed = prevIds.has(String(a.id));
+    const row = createAnswerRow(a, wasRevealed);
+    section.appendChild(row);
+  }
+
+  timer.style.display = 'flex';
+  timerMax = question.time_limit || 60;
+  updateTimer(game.timer_remaining);
+}
+
+function createAnswerRow(answer, wasRevealed) {
+  const row = document.createElement('div');
+  row.className = `answer-row ${answer.revealed ? 'revealed' : 'answer-hidden'}`;
+  row.dataset.id = answer.id;
+
+  const rank = document.createElement('div');
+  rank.className = 'answer-rank';
+  rank.textContent = answer.rank;
+
+  const text = document.createElement('div');
+  text.className = 'answer-text';
+  text.textContent = answer.revealed ? answer.answer : '';
+
+  const pts = document.createElement('div');
+  pts.className = 'answer-points';
+  pts.textContent = answer.revealed ? answer.points : '';
+
+  row.appendChild(rank);
+  row.appendChild(text);
+  row.appendChild(pts);
+
+  // Play sound if newly revealed
+  if (answer.revealed && !wasRevealed) {
+    SoundEngine.correct();
+  }
+
+  return row;
+}
+
+function renderStrikes(game, settings) {
+  const section = $('strikesSection');
+  const display = $('strikesDisplay');
+
+  if (!game.question_id) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'flex';
+  const maxStrikes = parseInt(settings?.max_strikes) || 3;
+  display.innerHTML = '';
+
+  for (let i = 0; i < maxStrikes; i++) {
+    const icon = document.createElement('div');
+    icon.className = `strike-icon ${i < game.strikes ? 'active' : ''}`;
+    icon.textContent = i < game.strikes ? '✕' : '';
+    display.appendChild(icon);
+  }
+}
+
+function renderTimer(game) {
+  const timerEl = $('timerSection');
+  if (game.phase === 'idle' || !game.question_id) {
+    timerEl.style.display = 'none';
+    return;
+  }
+  timerEl.style.display = 'flex';
+  updateTimer(game.timer_remaining);
+}
+
+function updateTimer(remaining) {
+  const num = $('timerNumber');
+  const ring = $('timerRing');
+  if (!num || !ring) return;
+
+  const secs = Math.max(0, remaining || 0);
+  num.textContent = secs;
+
+  const progress = secs / timerMax;
+  const offset = CIRCUMFERENCE * (1 - progress);
+  ring.style.strokeDashoffset = offset;
+
+  // Color states
+  ring.classList.remove('warning', 'danger');
+  num.classList.remove('warning', 'danger');
+
+  if (secs <= 10) {
+    ring.classList.add('danger');
+    num.classList.add('danger');
+  } else if (secs <= 20) {
+    ring.classList.add('warning');
+    num.classList.add('warning');
+  }
+}
+
+function renderStealBanner(game, teams) {
+  const banner = $('stealBanner');
+  const nameEl = $('stealTeamName');
+  if (game.phase === 'steal') {
+    banner.classList.add('visible');
+    const stealTeam = teams.find(t => t.id === game.steal_team_id);
+    if (nameEl && stealTeam) nameEl.textContent = stealTeam.name.toUpperCase();
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+// ─── Overlay ────────────────────────────────────
+function showOverlay(icon, title, sub) {
+  $('overlayIcon').textContent = icon;
+  $('overlayTitle').textContent = title;
+  $('overlaySub').textContent = sub;
+  $('statusOverlay').classList.add('visible');
+}
+
+function hideOverlay() {
+  $('statusOverlay').classList.remove('visible');
+}
+
+// Close overlay on click
+$('statusOverlay').addEventListener('click', hideOverlay);
+
+// ─── Confetti ────────────────────────────────────
+function launchConfetti() {
+  const container = $('confettiContainer');
+  const colors = ['#22c55e','#f59e0b','#3b82f6','#ef4444','#a855f7','#fcd34d'];
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + 'vw';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    piece.style.animationDelay = Math.random() * 1 + 's';
+    container.appendChild(piece);
+    piece.addEventListener('animationend', () => piece.remove());
+  }
+}
+
+// ─── Utilities ───────────────────────────────────
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function createIdleScreen() {
+  const d = document.createElement('div');
+  d.id = 'idleScreen';
+  d.className = 'idle-screen';
+  d.innerHTML = `
+    <div class="idle-icon">🎯</div>
+    <div class="idle-title">KUIS FAMILY 100</div>
+    <div class="idle-sub">MTS Al Husna — Siap Belajar Sambil Bermain!</div>
+  `;
+  return d;
+}
+
+// ─── Initial Load ────────────────────────────────
+(async () => {
+  try {
+    const res = await fetch('/api/game/state');
+    const s = await res.json();
+    state = s;
+    renderAll(s);
+  } catch (e) {
+    console.error('Gagal memuat state:', e);
+  }
+})();
+</script>
+</body>
+</html>
