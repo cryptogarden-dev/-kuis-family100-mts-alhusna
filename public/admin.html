@@ -528,7 +528,8 @@ async function awardPointsToTeam(teamId) {
   const team = allTeams.find(t => t.id === teamId);
   const confirmed = confirm(`Berikan ${points} poin ke ${team?.name}?`);
   if (!confirmed) return;
-  await api('POST', `/api/teams/${teamId}/add-score`, { points });
+  // /api/game/end sendiri yang menambahkan skor tim (award_to_team) —
+  // jangan panggil /api/teams/:id/add-score juga, nanti poinnya dobel.
   await api('POST', '/api/game/end', { award_to_team: teamId });
   SoundEngine.celebrate();
   toast(`🎉 ${points} poin diberikan ke ${team?.name}!`, 'success');
@@ -699,17 +700,22 @@ function updateAdminTimer(remaining, max, enabled) {
 // ─── Dropdowns ───────────────────────────────────
 function populateQuestionDropdown() {
   const sel = document.getElementById('selectQuestion');
+  const prevValue = sel.value;
   sel.innerHTML = '<option value="">— Pilih soal —</option>';
   allQuestions.forEach(q => {
     const opt = document.createElement('option');
     opt.value = q.id;
     opt.textContent = `[${q.category}] ${q.question}`;
+    opt.title = `${q.question} (${q.answers?.length || 0} jawaban, ${q.time_limit}s)`;
     sel.appendChild(opt);
   });
+  // Pertahankan pilihan soal kalau soal itu masih ada (misal setelah edit soal lain).
+  if (prevValue && allQuestions.some(q => String(q.id) === prevValue)) sel.value = prevValue;
 }
 
 function populateTeamDropdown() {
   const sel = document.getElementById('selectTeam');
+  const prevValue = sel.value;
   sel.innerHTML = '<option value="">— Pilih tim —</option>';
   allTeams.forEach(t => {
     const opt = document.createElement('option');
@@ -717,6 +723,7 @@ function populateTeamDropdown() {
     opt.textContent = t.name;
     sel.appendChild(opt);
   });
+  if (prevValue && allTeams.some(t => String(t.id) === prevValue)) sel.value = prevValue;
 }
 
 // ─── Questions UI ─────────────────────────────────
@@ -996,10 +1003,14 @@ async function importQuestions() {
   if (!text) return toast('Tempel soal terlebih dahulu', 'error');
 
   const res = await api('POST', '/api/questions/import', { text });
-  const resultEl = document.getElementById('importResult');
-  resultEl.className = 'import-result visible ' + (res.errors?.length && !res.imported ? 'error' : 'success');
+  if (res.error) return toast(res.error, 'error');
 
-  let html = `<strong>${res.imported} soal berhasil diimport!</strong>`;
+  const resultEl = document.getElementById('importResult');
+  resultEl.className = 'import-result visible ' + (!res.imported ? 'error' : 'success');
+
+  let html = res.imported
+    ? `<strong>${res.imported} soal berhasil diimport!</strong>`
+    : `<strong>Tidak ada soal yang berhasil diimport.</strong> Cek kembali format teksnya.`;
   if (res.questions?.length) {
     html += '<ul style="margin-top:8px;padding-left:20px;">';
     res.questions.forEach(q => { html += `<li>${q}</li>`; });
